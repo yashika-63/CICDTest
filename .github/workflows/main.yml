@@ -1,59 +1,37 @@
 name: Push-to-EC2 instance
- 
+
 on:
   push:
     branches:
       - main
- 
+
 jobs:
   deploy:
     name: Push to EC2
     runs-on: ubuntu-latest
- 
+
     steps:
       - name: Checkout the code
         uses: actions/checkout@v1
- 
-      - name: Configure SSH
+
+      - name: Deploy to EC2
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          HOSTNAME: ${{ secrets.HOST_DNS }}
+          USER_NAME: ${{ secrets.USERNAME }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          eval $(ssh-agent -s)
-          ssh-add ~/.ssh/deploy_key
- 
-      - name: Deploy to my EC2 instance
-        uses: easingthemes/ssh-deploy@v2.1.5
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          SOURCE: "./"
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          TARGET: ${{ secrets.TARGET_DIR }}
- 
-      - name: Executing remote ssh commands
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST_DNS }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -xe
-            sudo yum -y update
-            sudo yum install -y httpd
-            sudo systemctl start httpd
-            sudo systemctl enable httpd
-            cd /home
-            ls
-            cd ec2-user
-            cd trial 
-            cd CICDTest
-            sudo yum install nodejs npm -y
-            npm install
-            sudo npm run build
-            cd build
-            sudo rm -rf /var/www/html/reactapp5/*
-            sudo mv * /var/www/html/reactapp5
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ec2-user/trial/CICDTest &&
+            sudo yum -y update &&
+            sudo yum install -y httpd &&
+            sudo systemctl start httpd &&
+            sudo systemctl enable httpd &&
+            sudo yum install nodejs npm -y &&
+            npm install &&
+            sudo npm run build &&
+            cd build &&
+            sudo rm -rf /var/www/html/reactapp5/* &&
+            sudo mv * /var/www/html/reactapp5 &&
             sudo systemctl restart httpd
+          '
